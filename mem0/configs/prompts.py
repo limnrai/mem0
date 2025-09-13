@@ -288,7 +288,7 @@ You are a memory summarization system that records and preserves the complete in
 """
 
 
-def get_update_memory_messages(retrieved_old_memory_dict, response_content, custom_update_memory_prompt=None):
+def get_update_memory_messages(retrieved_old_memory_dict, response_content, custom_update_memory_prompt=None, predefined_categories=[], default_category=None):
     if custom_update_memory_prompt is None:
         global DEFAULT_UPDATE_MEMORY_PROMPT
         custom_update_memory_prompt = DEFAULT_UPDATE_MEMORY_PROMPT
@@ -309,6 +309,13 @@ def get_update_memory_messages(retrieved_old_memory_dict, response_content, cust
 
     """
 
+    category_prompt = ""
+    if predefined_categories:
+        category_prompt = f"""Analyze the memory and determine the category exactly from this list: "{', '.join(predefined_categories)}". If you are not sure about the category choose {default_category}.
+    """
+    else:
+        category_prompt = "Analyze the memory and determine a suitable, concise and one-word category for the memory content."
+
     return f"""{custom_update_memory_prompt}
 
     {current_memory_part}
@@ -319,6 +326,8 @@ def get_update_memory_messages(retrieved_old_memory_dict, response_content, cust
     {response_content}
     ```
 
+    {category_prompt}
+
     You must return your response in the following JSON structure only:
 
     {{
@@ -327,7 +336,8 @@ def get_update_memory_messages(retrieved_old_memory_dict, response_content, cust
                 "id" : "<ID of the memory>",                # Use existing ID for updates/deletes, or new ID for additions
                 "text" : "<Content of the memory>",         # Content of the memory
                 "event" : "<Operation to be performed>",    # Must be "ADD", "UPDATE", "DELETE", or "NONE"
-                "old_memory" : "<Old memory content>"       # Required only if the event is "UPDATE"
+                "old_memory" : "<Old memory content>",      # Required only if the event is "UPDATE"
+                "category": "<Category of the memory>"      # Determined category of the memory
             }},
             ...
         ]

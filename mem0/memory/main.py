@@ -377,7 +377,7 @@ class Memory(MemoryBase):
 
         if new_retrieved_facts:
             function_calling_prompt = get_update_memory_messages(
-                retrieved_old_memory, new_retrieved_facts, self.config.custom_update_memory_prompt
+                retrieved_old_memory, new_retrieved_facts, self.config.custom_update_memory_prompt, predefined_categories=self.config.custom_category_list, default_category=self.config.default_category
             )
 
             try:
@@ -1225,7 +1225,7 @@ class AsyncMemory(MemoryBase):
 
         if new_retrieved_facts:
             function_calling_prompt = get_update_memory_messages(
-                retrieved_old_memory, new_retrieved_facts, self.config.custom_update_memory_prompt
+                retrieved_old_memory, new_retrieved_facts, self.config.custom_update_memory_prompt, predefined_categories=self.config.custom_category_list, default_category=self.config.default_category
             )
             try:
                 response = await asyncio.to_thread(

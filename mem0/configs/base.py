@@ -59,7 +59,14 @@ class MemoryConfig(BaseModel):
         description="Custom prompt for the update memory",
         default=None,
     )
-
+    custom_category_list: Optional[list[str]] = Field(
+        description="Custom predefined category list to choose a category for a memory",
+        default=[],
+    )
+    default_category: Optional[str] = Field(
+        description="Default category for a memory. If custom_category_list is provided it is better to provide default_category as well.",
+        default="Note",
+    )
 
 class AzureConfig(BaseModel):
     """
