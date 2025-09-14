@@ -1,4 +1,5 @@
 from datetime import datetime
+import pytz
 
 MEMORY_ANSWER_PROMPT = """
 You are an expert at answering questions based on the provided memories. Your task is to provide accurate and concise answers to the questions by leveraging the information given in the memories.
@@ -316,6 +317,15 @@ def get_update_memory_messages(retrieved_old_memory_dict, response_content, cust
     else:
         category_prompt = "Analyze the memory and determine a suitable, concise and one-word category for the memory content."
 
+    current_time = datetime.now(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp_prompt = f"""
+        current_time is {current_time}.
+        Identify any date-related information in the input (e.g., "June 15, 2023", "last week", "Q1 2022") as effective_timestamp:
+        - If date-related information is missing assume current date.
+        - Convert the date to ISO 8601 format (e.g., "2023-06-15T00:00:00Z").
+        - If multiple dates are found, select the most relevant date based on context or indicate ambiguity.
+    """
+
     return f"""{custom_update_memory_prompt}
 
     {current_memory_part}
@@ -328,16 +338,19 @@ def get_update_memory_messages(retrieved_old_memory_dict, response_content, cust
 
     {category_prompt}
 
+    {timestamp_prompt}
+
     You must return your response in the following JSON structure only:
 
     {{
         "memory" : [
             {{
-                "id" : "<ID of the memory>",                # Use existing ID for updates/deletes, or new ID for additions
-                "text" : "<Content of the memory>",         # Content of the memory
-                "event" : "<Operation to be performed>",    # Must be "ADD", "UPDATE", "DELETE", or "NONE"
-                "old_memory" : "<Old memory content>",      # Required only if the event is "UPDATE"
-                "category": "<Category of the memory>"      # Determined category of the memory
+                "id" : "<ID of the memory>",                        # Use existing ID for updates/deletes, or new ID for additions
+                "text" : "<Content of the memory>",                 # Content of the memory
+                "event" : "<Operation to be performed>",            # Must be "ADD", "UPDATE", "DELETE", or "NONE"
+                "old_memory" : "<Old memory content>",              # Required only if the event is "UPDATE"
+                "category": "<Category of the memory>",             # Determined category of the memory
+                "effective_timestamp": "<Timestamp of the memory>"  # Suggested effective timestamp of the memory
             }},
             ...
         ]

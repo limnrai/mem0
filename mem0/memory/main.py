@@ -413,11 +413,14 @@ class Memory(MemoryBase):
                         continue
 
                     event_type = resp.get("event")
+                    metadata_copy = deepcopy(metadata) or {}
+                    metadata_copy["category"] = resp.get("category")
+                    metadata_copy["effective_timestamp"] = resp.get("effective_timestamp")
                     if event_type == "ADD":
                         memory_id = self._create_memory(
                             data=action_text,
                             existing_embeddings=new_message_embeddings,
-                            metadata=deepcopy(metadata),
+                            metadata=metadata_copy,
                         )
                         returned_memories.append({"id": memory_id, "memory": action_text, "event": event_type})
                     elif event_type == "UPDATE":
@@ -425,7 +428,7 @@ class Memory(MemoryBase):
                             memory_id=temp_uuid_mapping[resp.get("id")],
                             data=action_text,
                             existing_embeddings=new_message_embeddings,
-                            metadata=deepcopy(metadata),
+                            metadata=metadata_copy,
                         )
                         returned_memories.append(
                             {
@@ -1259,13 +1262,15 @@ class AsyncMemory(MemoryBase):
                     if not action_text:
                         continue
                     event_type = resp.get("event")
-
+                    metadata_copy = deepcopy(metadata) or {}
+                    metadata_copy["category"] = resp.get("category")
+                    metadata_copy["effective_timestamp"] = resp.get("effective_timestamp")
                     if event_type == "ADD":
                         task = asyncio.create_task(
                             self._create_memory(
                                 data=action_text,
                                 existing_embeddings=new_message_embeddings,
-                                metadata=deepcopy(metadata),
+                                metadata=metadata_copy,
                             )
                         )
                         memory_tasks.append((task, resp, "ADD", None))
@@ -1275,7 +1280,7 @@ class AsyncMemory(MemoryBase):
                                 memory_id=temp_uuid_mapping[resp["id"]],
                                 data=action_text,
                                 existing_embeddings=new_message_embeddings,
-                                metadata=deepcopy(metadata),
+                                metadata=metadata_copy,
                             )
                         )
                         memory_tasks.append((task, resp, "UPDATE", temp_uuid_mapping[resp["id"]]))
