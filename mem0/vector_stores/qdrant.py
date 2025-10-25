@@ -263,6 +263,25 @@ class Qdrant(VectorStoreBase):
         )
         return result
 
+    def count(self, filters: dict = None, exact: bool = True, limit: int = 100) -> list:
+        """
+        List all vectors in a collection.
+
+        Args:
+            filters (dict, optional): Filters to apply to the list. Defaults to None.
+            limit (int, optional): Number of vectors to return. Defaults to 100.
+
+        Returns:
+            list: List of vectors.
+        """
+        query_filter = self._create_filter(filters) if filters else None
+        result = self.client.count(
+            collection_name=self.collection_name,
+            count_filter=query_filter,
+            exact=exact,
+        )
+        return result
+
     def reset(self):
         """Reset the index by deleting and recreating it."""
         logger.warning(f"Resetting index {self.collection_name}...")

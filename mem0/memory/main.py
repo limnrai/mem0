@@ -750,6 +750,77 @@ class Memory(MemoryBase):
 
         return formatted_memories
 
+    def count(
+        self,
+        *,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        metadata_filters: Optional[Dict[str, Any]] = None,
+        exact: bool = True,
+    ) -> int:
+        """
+        Warning: This is added/tested with only Qdrant
+
+        Counts the number of memories matching the given filters (synchronous version).
+
+        Args:
+            user_id (str, optional): ID of the user to count for.
+            agent_id (str, optional): ID of the agent to count for.
+            run_id (str, optional): ID of the run to count for.
+            filters (dict, optional): Filters for the count query. Supports the same operators as `search()`.
+            metadata_filters (dict, optional): Additional metadata filters.
+            exact (bool, optional): Whether to return the exact count or an approximate one. Defaults to True.
+
+        Returns:
+            int: Count of memories matching the filters.
+        """
+        _, effective_filters = _build_filters_and_metadata(
+            user_id=user_id, agent_id=agent_id, run_id=run_id, input_filters=filters
+        )
+
+        if not any(key in effective_filters for key in ("user_id", "agent_id", "run_id")):
+            raise ValueError("At least one of 'user_id', 'agent_id', or 'run_id' must be specified.")
+
+        if filters and self._has_advanced_operators(filters):
+            processed_filters = self._process_metadata_filters(filters)
+            effective_filters.update(processed_filters)
+        elif filters:
+            effective_filters.update(filters)
+
+        keys, encoded_ids = process_telemetry_filters(effective_filters)
+        capture_event(
+            "mem0.count",
+            self,
+            {
+                "version": self.api_version,
+                "keys": keys,
+                "encoded_ids": encoded_ids,
+                "sync_type": "sync",
+                "exact": exact,
+            },
+        )
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_count = executor.submit(
+                self._count_all_from_vector_store,
+                filters=effective_filters,
+                exact=exact,
+            )
+            concurrent.futures.wait([future_count])
+
+            try:
+                result = future_count.result()
+                return result.count
+            except Exception as e:
+                logger.error(f"Failed to count records in vector store: {e}")
+                raise
+
+    def _count_all_from_vector_store(self, filters, exact):
+        count_memories_result = self.vector_store.count(filters=filters, exact=exact)
+        return count_memories_result
+
     def search(
         self,
         query: str,
@@ -1792,6 +1863,80 @@ class AsyncMemory(MemoryBase):
             formatted_memories.append(memory_item_dict)
 
         return formatted_memories
+
+    async def count(
+        self,
+        *,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        metadata_filters: Optional[Dict[str, Any]] = None,
+        exact: bool = True,
+    ) -> int:
+        """
+        Warning: This is added/tested with only Qdrant
+
+        Counts the number of memories matching given filters.
+
+        Args:
+            user_id (str, optional): ID of the user to count for.
+            agent_id (str, optional): ID of the agent to count for.
+            run_id (str, optional): ID of the run to count for.
+            filters (dict, optional): Filtering conditions for memories.
+                Supports same operators as `search`:
+                - {"key": "value"} - exact match
+                - {"key": {"eq": "value"}} - equals
+                - {"key": {"in": ["a", "b"]}} - in list
+                - {"AND": [f1, f2]} - logical AND
+                - etc.
+            metadata_filters (dict, optional): Additional filters on payload metadata.
+            exact (bool, optional): Whether to get an exact or approximate count. Defaults to True.
+
+        Returns:
+            int: The count of matching memories.
+        """
+        _, effective_filters = _build_filters_and_metadata(
+            user_id=user_id, agent_id=agent_id, run_id=run_id, input_filters=filters
+        )
+
+        if not any(key in effective_filters for key in ("user_id", "agent_id", "run_id")):
+            raise ValueError("at least one of 'user_id', 'agent_id', or 'run_id' must be specified")
+
+        if filters and self._has_advanced_operators(filters):
+            processed_filters = self._process_metadata_filters(filters)
+            effective_filters.update(processed_filters)
+        elif filters:
+            effective_filters.update(filters)
+
+        keys, encoded_ids = process_telemetry_filters(effective_filters)
+        capture_event(
+            "mem0.count",
+            self,
+            {
+                "version": self.api_version,
+                "keys": keys,
+                "encoded_ids": encoded_ids,
+                "sync_type": "async",
+                "exact": exact,
+            },
+        )
+
+        try:
+            result = await asyncio.to_thread(
+                self._count_all_from_vector_store,
+                collection_name=self.collection_name,
+                count_filter=effective_filters,
+                exact=exact,
+            )
+            return result.count
+        except Exception as e:
+            logger.error(f"Failed to count records in vector store: {e}")
+            raise
+
+    async def _count_all_from_vector_store(self, filters, limit):
+        count_memories_result = await asyncio.to_thread(self.vector_store.list, filters=filters, limit=limit)
+        return count_memories_result
 
     async def search(
         self,
