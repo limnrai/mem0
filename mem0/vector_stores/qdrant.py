@@ -1,6 +1,8 @@
 import logging
 import os
 import shutil
+from dateutil.parser import parse
+from dateutil.parser import ParserError
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -12,6 +14,7 @@ from qdrant_client.models import (
     PointStruct,
     Range,
     VectorParams,
+    DatetimeRange,
 )
 
 from mem0.vector_stores.base import VectorStoreBase
@@ -154,7 +157,32 @@ class Qdrant(VectorStoreBase):
         conditions = []
         for key, value in filters.items():
             if isinstance(value, dict) and "gte" in value and "lte" in value:
-                conditions.append(FieldCondition(key=key, range=Range(gte=value["gte"], lte=value["lte"])))
+                gte_val, lte_val = value["gte"], value["lte"]
+
+                is_datetime = False
+                for val in (gte_val, lte_val):
+                    if isinstance(val, str):
+                        try:
+                            parse(val, fuzzy=False)
+                            is_datetime = True
+                            break
+                        except ParserError:
+                            pass
+
+                if is_datetime:
+                    conditions.append(
+                        FieldCondition(
+                            key=key,
+                            range=DatetimeRange(gte=gte_val, lte=lte_val)
+                        )
+                    )
+                else:
+                    conditions.append(
+                        FieldCondition(
+                            key=key,
+                            range=Range(gte=gte_val, lte=lte_val)
+                        )
+                    )
             else:
                 conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
         return Filter(must=conditions) if conditions else None

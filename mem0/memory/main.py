@@ -783,12 +783,6 @@ class Memory(MemoryBase):
         if not any(key in effective_filters for key in ("user_id", "agent_id", "run_id")):
             raise ValueError("At least one of 'user_id', 'agent_id', or 'run_id' must be specified.")
 
-        if filters and self._has_advanced_operators(filters):
-            processed_filters = self._process_metadata_filters(filters)
-            effective_filters.update(processed_filters)
-        elif filters:
-            effective_filters.update(filters)
-
         keys, encoded_ids = process_telemetry_filters(effective_filters)
         capture_event(
             "mem0.count",
