@@ -5,6 +5,7 @@ from dateutil.parser import parse
 from dateutil.parser import ParserError
 
 from qdrant_client import QdrantClient
+from qdrant_client.http import models
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -270,7 +271,7 @@ class Qdrant(VectorStoreBase):
         """
         return self.client.get_collection(collection_name=self.collection_name)
 
-    def list(self, filters: dict = None, limit: int = 100) -> list:
+    def list(self, filters: dict = None, limit: int = 100, order_by: dict = None) -> list:
         """
         List all vectors in a collection.
 
@@ -281,6 +282,15 @@ class Qdrant(VectorStoreBase):
         Returns:
             list: List of vectors.
         """
+        scroll_order_by = None
+        if order_by:
+            direction = models.Direction.ASC
+            if order_by['direction'] == 'DESC':
+                direction = models.Direction.DESC
+            scroll_order_by = models.OrderBy(
+                    key=order_by['key'],
+                    direction=direction
+                )
         query_filter = self._create_filter(filters) if filters else None
         result = self.client.scroll(
             collection_name=self.collection_name,
@@ -288,6 +298,7 @@ class Qdrant(VectorStoreBase):
             limit=limit,
             with_payload=True,
             with_vectors=False,
+            order_by=scroll_order_by
         )
         return result
 
