@@ -661,7 +661,8 @@ class Memory(MemoryBase):
         run_id: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-        order_by: dict = None
+        order_by: dict = None,
+        offset: Optional[any] = None
     ):
         """
         List all memories.
@@ -695,7 +696,7 @@ class Memory(MemoryBase):
         )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_memories = executor.submit(self._get_all_from_vector_store, effective_filters, limit, order_by)
+            future_memories = executor.submit(self._get_all_from_vector_store, effective_filters, limit, order_by, offset)
             future_graph_entities = (
                 executor.submit(self.graph.get_all, effective_filters, limit) if self.enable_graph else None
             )
@@ -712,8 +713,8 @@ class Memory(MemoryBase):
 
         return {"results": all_memories_result}
 
-    def _get_all_from_vector_store(self, filters, limit, order_by):
-        memories_result = self.vector_store.list(filters=filters, limit=limit, order_by=order_by)
+    def _get_all_from_vector_store(self, filters, limit, order_by, offset):
+        memories_result = self.vector_store.list(filters=filters, limit=limit, order_by=order_by, offset=offset)
         actual_memories = (
             memories_result[0]
             if isinstance(memories_result, (tuple)) and len(memories_result) > 0
@@ -1298,6 +1299,8 @@ class Memory(MemoryBase):
     def chat(self, query):
         raise NotImplementedError("Chat function not implemented yet.")
 
+    def create_index(self, field_name: str, schema_type: str):
+        return self.vector_store.create_index(field_name, schema_type)
 
 class AsyncMemory(MemoryBase):
     def __init__(self, config: MemoryConfig = MemoryConfig()):
@@ -1765,7 +1768,8 @@ class AsyncMemory(MemoryBase):
         run_id: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-        order_by: dict = None
+        order_by: dict = None,
+        offset: Optional[any] = None
     ):
         """
         List all memories.
@@ -1801,7 +1805,7 @@ class AsyncMemory(MemoryBase):
             "mem0.get_all", self, {"limit": limit, "keys": keys, "encoded_ids": encoded_ids, "sync_type": "async"}
         )
 
-        vector_store_task = asyncio.create_task(self._get_all_from_vector_store(effective_filters, limit, order_by))
+        vector_store_task = asyncio.create_task(self._get_all_from_vector_store(effective_filters, limit, order_by, offset))
 
         graph_task = None
         if self.enable_graph:
@@ -1821,8 +1825,8 @@ class AsyncMemory(MemoryBase):
 
         return results_dict
 
-    async def _get_all_from_vector_store(self, filters, limit, order_by):
-        memories_result = await asyncio.to_thread(self.vector_store.list, filters=filters, limit=limit, order_by=order_by)
+    async def _get_all_from_vector_store(self, filters, limit, order_by, offset):
+        memories_result = await asyncio.to_thread(self.vector_store.list, filters=filters, limit=limit, order_by=order_by, offset=offset)
         actual_memories = (
             memories_result[0]
             if isinstance(memories_result, (tuple)) and len(memories_result) > 0

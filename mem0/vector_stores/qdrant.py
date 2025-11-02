@@ -271,7 +271,7 @@ class Qdrant(VectorStoreBase):
         """
         return self.client.get_collection(collection_name=self.collection_name)
 
-    def list(self, filters: dict = None, limit: int = 100, order_by: dict = None) -> list:
+    def list(self, filters: dict = None, limit: int = 100, order_by: dict = None, offset: any = None) -> list:
         """
         List all vectors in a collection.
 
@@ -298,7 +298,8 @@ class Qdrant(VectorStoreBase):
             limit=limit,
             with_payload=True,
             with_vectors=False,
-            order_by=scroll_order_by
+            order_by=scroll_order_by,
+            offset=offset
         )
         return result
 
@@ -326,3 +327,48 @@ class Qdrant(VectorStoreBase):
         logger.warning(f"Resetting index {self.collection_name}...")
         self.delete_col()
         self.create_col(self.embedding_model_dims, self.on_disk)
+
+    def create_index(self, field_name: str, schema_type: str) -> any:
+        payload_schema_type = models.KeywordIndexParams(
+                type=models.KeywordIndexType.KEYWORD,
+                is_tenant=True,
+            )
+        if schema_type == "integer":
+            payload_schema_type = models.IntegerIndexParams(
+                type=models.IntegerIndexType.INTEGER,
+                is_principal=True,
+            )
+        elif schema_type == "float":
+            payload_schema_type = models.FloatIndexParams(
+                type=models.FloatIndexType.FLOAT,
+                is_principal=True,
+            )
+        elif schema_type == "geo":
+            payload_schema_type = models.GeoIndexParams(
+                type=models.GeoIndexType.GEO,
+            )
+        elif schema_type == "text":
+            payload_schema_type = models.TextIndexParams(
+                type=models.TextIndexType.TEXT,
+            )
+        elif schema_type == "bool":
+            payload_schema_type = models.BoolIndexParams(
+                type=models.BoolIndexType.BOOL,
+            )
+        elif schema_type == "datetime":
+            payload_schema_type = models.DatetimeIndexParams(
+                type=models.DatetimeIndexType.DATETIME,
+                is_principal=True
+            )
+        elif schema_type == "uuid":
+            payload_schema_type = models.UuidIndexParams(
+                type=models.UuidIndexType.UUID,
+                is_tenant=True
+            )
+
+        result = self.client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name=field_name,
+            field_schema=payload_schema_type,
+        )
+        return result
