@@ -88,6 +88,14 @@ class Qdrant(VectorStoreBase):
             on_disk (bool): Enables persistent storage.
             distance (Distance, optional): Distance metric for vector similarity. Defaults to Distance.COSINE.
         """
+        # Temporary debug code
+        import traceback
+        print("=== create_col called from ===")
+        for line in traceback.format_stack()[:-1]:
+            if "create_col" not in line:  # Filter out current frame
+                print(line.strip())
+        print("=== End traceback ===\n")
+
         # Skip creating collection if already exists
         response = self.list_cols()
         for collection in response.collections:

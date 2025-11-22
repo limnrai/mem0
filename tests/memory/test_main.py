@@ -55,7 +55,9 @@ class TestAddToVectorStoreErrors:
 
         # Verify
         assert mock_memory.llm.generate_response.call_count == 1
-        assert result == []  # Should return empty list when no memories processed
+        assert isinstance(result, tuple)
+        assert result[0] == []  # Should return empty list when no memories processed
+        assert "total_input_tokens" in result[1]
         # Check for error message in any of the log records
         assert any("Error in new_retrieved_facts" in record.msg for record in caplog.records), "Expected error message not found in logs"
         assert mock_capture_event.call_count == 1
@@ -74,7 +76,8 @@ class TestAddToVectorStoreErrors:
 
         # Verify
         assert mock_memory.llm.generate_response.call_count == 2
-        assert result == []  # Should return empty list when no memories processed
+        assert isinstance(result, tuple)
+        assert result[0] == []  # Should return empty list when no memories processed
         assert "Empty response from LLM, no memories to extract" in caplog.text
 
 
@@ -106,7 +109,8 @@ class TestAsyncAddToVectorStoreErrors:
                 messages=[{"role": "user", "content": "test"}], metadata={}, effective_filters={}, infer=True
             )
         assert mock_async_memory.llm.generate_response.call_count == 1
-        assert result == []
+        assert isinstance(result, tuple)
+        assert result[0] == []
         # Check for error message in any of the log records
         assert any("Error in new_retrieved_facts" in record.msg for record in caplog.records), "Expected error message not found in logs"
         assert mock_capture_event.call_count == 1
@@ -124,6 +128,7 @@ class TestAsyncAddToVectorStoreErrors:
                 messages=[{"role": "user", "content": "test"}], metadata={}, effective_filters={}, infer=True
             )
 
-        assert result == []
+        assert isinstance(result, tuple)
+        assert result[0] == []
         assert "Empty response from LLM, no memories to extract" in caplog.text
         assert mock_capture_event.call_count == 1

@@ -71,7 +71,11 @@ def memory_custom_instance():
 def test_add(memory_instance, version, enable_graph):
     memory_instance.config.version = version
     memory_instance.enable_graph = enable_graph
-    memory_instance._add_to_vector_store = Mock(return_value=[{"memory": "Test memory", "event": "ADD"}])
+    # Update mock to return tuple with token counts
+    memory_instance._add_to_vector_store = Mock(return_value=(
+        [{"memory": "Test memory", "event": "ADD"}],
+        {"fact_extraction_tokens": 10, "memory_update_tokens": 5, "total_input_tokens": 15}
+    ))
     memory_instance._add_to_graph = Mock(return_value=[])
 
     result = memory_instance.add(messages=[{"role": "user", "content": "Test message"}], user_id="test_user")
@@ -81,9 +85,13 @@ def test_add(memory_instance, version, enable_graph):
         assert result["results"] == [{"memory": "Test memory", "event": "ADD"}]
         assert "relations" in result
         assert result["relations"] == []
+        assert "token_counts" in result
+        assert result["token_counts"]["total_input_tokens"] == 15
     else:
         assert "results" in result
         assert result["results"] == [{"memory": "Test memory", "event": "ADD"}]
+        assert "token_counts" in result
+        assert result["token_counts"]["total_input_tokens"] == 15
 
     memory_instance._add_to_vector_store.assert_called_once_with(
         [{"role": "user", "content": "Test message"}], {"user_id": "test_user"}, {"user_id": "test_user"}, True

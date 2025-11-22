@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import pytz
+import tiktoken
 from pydantic import ValidationError
 
 from mem0.configs.base import MemoryConfig, MemoryItem
@@ -278,6 +279,47 @@ class Memory(MemoryBase):
         # Use agent memory extraction if agent_id is present and there are assistant messages
         return has_agent_id and has_assistant_messages
 
+    def _count_tokens(self, messages):
+        """Count the number of input tokens for a list of messages.
+        
+        Args:
+            messages: List of message dictionaries in OpenAI format
+            
+        Returns:
+            int: Total number of input tokens, or 0 if counting fails
+        """
+        try:
+            # Get the model name from config, default to gpt-4 if not available
+            model = getattr(self.config.llm.config, 'model', 'gpt-4')
+            
+            # Try to get the encoding for the specific model
+            try:
+                encoding = tiktoken.encoding_for_model(model)
+            except KeyError:
+                # If model not found, use cl100k_base (used by gpt-4, gpt-3.5-turbo, etc.)
+                logger.debug(f"Model {model} not found in tiktoken, using cl100k_base encoding")
+                encoding = tiktoken.get_encoding("cl100k_base")
+            
+            # Count tokens for each message
+            total_tokens = 0
+            for message in messages:
+                # Add tokens for role
+                if 'role' in message:
+                    total_tokens += len(encoding.encode(message['role']))
+                
+                # Add tokens for content
+                if 'content' in message and message['content']:
+                    total_tokens += len(encoding.encode(message['content']))
+            
+            # Add overhead tokens (OpenAI adds ~3 tokens per message for formatting)
+            total_tokens += len(messages) * 3
+            
+            return total_tokens
+            
+        except Exception as e:
+            logger.warning(f"Failed to count tokens: {e}. Returning 0.")
+            return 0
+
     def add(
         self,
         messages,
@@ -372,18 +414,27 @@ class Memory(MemoryBase):
 
             concurrent.futures.wait([future1, future2])
 
-            vector_store_result = future1.result()
+            # Unpack vector store result and token counts
+            vector_store_result, token_counts = future1.result()
             graph_result = future2.result()
 
         if self.enable_graph:
             return {
                 "results": vector_store_result,
                 "relations": graph_result,
+                "token_counts": token_counts,
             }
 
-        return {"results": vector_store_result}
+        return {
+            "results": vector_store_result,
+            "token_counts": token_counts,
+        }
 
     def _add_to_vector_store(self, messages, metadata, filters, infer):
+        # Initialize token counts
+        fact_extraction_tokens = 0
+        memory_update_tokens = 0
+        
         if not infer:
             returned_memories = []
             for message_dict in messages:
@@ -418,7 +469,12 @@ class Memory(MemoryBase):
                         "role": message_dict["role"],
                     }
                 )
-            return returned_memories
+            # Return with token counts (0 when infer=False)
+            return returned_memories, {
+                "fact_extraction_tokens": 0,
+                "memory_update_tokens": 0,
+                "total_input_tokens": 0
+            }
 
         parsed_messages = parse_messages(messages)
 
@@ -431,11 +487,15 @@ class Memory(MemoryBase):
             is_agent_memory = self._should_use_agent_memory_extraction(messages, metadata)
             system_prompt, user_prompt = get_fact_retrieval_messages(parsed_messages, is_agent_memory)
 
+        # Count tokens for fact extraction LLM call
+        fact_extraction_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        fact_extraction_tokens = self._count_tokens(fact_extraction_messages)
+        
         response = self.llm.generate_response(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=fact_extraction_messages,
             response_format={"type": "json_object"},
         )
 
@@ -499,8 +559,12 @@ class Memory(MemoryBase):
             )
 
             try:
+                # Count tokens for memory update LLM call
+                memory_update_messages = [{"role": "user", "content": function_calling_prompt}]
+                memory_update_tokens = self._count_tokens(memory_update_messages)
+                
                 response: str = self.llm.generate_response(
-                    messages=[{"role": "user", "content": function_calling_prompt}],
+                    messages=memory_update_messages,
                     response_format={"type": "json_object"},
                 )
             except Exception as e:
@@ -597,7 +661,14 @@ class Memory(MemoryBase):
             self,
             {"version": self.api_version, "keys": keys, "encoded_ids": encoded_ids, "sync_type": "sync"},
         )
-        return returned_memories
+        
+        # Return memories with token counts
+        token_counts = {
+            "fact_extraction_tokens": fact_extraction_tokens,
+            "memory_update_tokens": memory_update_tokens,
+            "total_input_tokens": fact_extraction_tokens + memory_update_tokens
+        }
+        return returned_memories, token_counts
 
     def _add_to_graph(self, messages, filters):
         added_entities = []
@@ -1401,6 +1472,47 @@ class AsyncMemory(MemoryBase):
         # Use agent memory extraction if agent_id is present and there are assistant messages
         return has_agent_id and has_assistant_messages
 
+    def _count_tokens(self, messages):
+        """Count the number of input tokens for a list of messages.
+        
+        Args:
+            messages: List of message dictionaries in OpenAI format
+            
+        Returns:
+            int: Total number of input tokens, or 0 if counting fails
+        """
+        try:
+            # Get the model name from config, default to gpt-4 if not available
+            model = getattr(self.config.llm.config, 'model', 'gpt-4')
+            
+            # Try to get the encoding for the specific model
+            try:
+                encoding = tiktoken.encoding_for_model(model)
+            except KeyError:
+                # If model not found, use cl100k_base (used by gpt-4, gpt-3.5-turbo, etc.)
+                logger.debug(f"Model {model} not found in tiktoken, using cl100k_base encoding")
+                encoding = tiktoken.get_encoding("cl100k_base")
+            
+            # Count tokens for each message
+            total_tokens = 0
+            for message in messages:
+                # Add tokens for role
+                if 'role' in message:
+                    total_tokens += len(encoding.encode(message['role']))
+                
+                # Add tokens for content
+                if 'content' in message and message['content']:
+                    total_tokens += len(encoding.encode(message['content']))
+            
+            # Add overhead tokens (OpenAI adds ~3 tokens per message for formatting)
+            total_tokens += len(messages) * 3
+            
+            return total_tokens
+            
+        except Exception as e:
+            logger.warning(f"Failed to count tokens: {e}. Returning 0.")
+            return 0
+
     async def add(
         self,
         messages,
@@ -1472,13 +1584,20 @@ class AsyncMemory(MemoryBase):
 
         vector_store_result, graph_result = await asyncio.gather(vector_store_task, graph_task)
 
+        # Unpack vector store result and token counts
+        vector_store_result, token_counts = vector_store_result
+
         if self.enable_graph:
             return {
                 "results": vector_store_result,
                 "relations": graph_result,
+                "token_counts": token_counts,
             }
 
-        return {"results": vector_store_result}
+        return {
+            "results": vector_store_result,
+            "token_counts": token_counts,
+        }
 
     async def _add_to_vector_store(
         self,
@@ -1487,6 +1606,10 @@ class AsyncMemory(MemoryBase):
         effective_filters: dict,
         infer: bool,
     ):
+        # Initialize token counts
+        fact_extraction_tokens = 0
+        memory_update_tokens = 0
+
         if not infer:
             returned_memories = []
             for message_dict in messages:
@@ -1521,7 +1644,12 @@ class AsyncMemory(MemoryBase):
                         "role": message_dict["role"],
                     }
                 )
-            return returned_memories
+            # Return with token counts (0 when infer=False)
+            return returned_memories, {
+                "fact_extraction_tokens": 0,
+                "memory_update_tokens": 0,
+                "total_input_tokens": 0
+            }
 
         parsed_messages = parse_messages(messages)
         if self.config.custom_fact_extraction_prompt:
@@ -1533,9 +1661,16 @@ class AsyncMemory(MemoryBase):
             is_agent_memory = self._should_use_agent_memory_extraction(messages, metadata)
             system_prompt, user_prompt = get_fact_retrieval_messages(parsed_messages, is_agent_memory)
 
+        # Count tokens for fact extraction LLM call
+        fact_extraction_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        fact_extraction_tokens = self._count_tokens(fact_extraction_messages)
+
         response = await asyncio.to_thread(
             self.llm.generate_response,
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            messages=fact_extraction_messages,
             response_format={"type": "json_object"},
         )
         try:
@@ -1601,9 +1736,13 @@ class AsyncMemory(MemoryBase):
                 retrieved_old_memory, new_retrieved_facts, self.config.custom_update_memory_prompt, predefined_categories=self.config.custom_category_list, default_category=self.config.default_category
             )
             try:
+                # Count tokens for memory update LLM call
+                memory_update_messages = [{"role": "user", "content": function_calling_prompt}]
+                memory_update_tokens = self._count_tokens(memory_update_messages)
+
                 response = await asyncio.to_thread(
                     self.llm.generate_response,
-                    messages=[{"role": "user", "content": function_calling_prompt}],
+                    messages=memory_update_messages,
                     response_format={"type": "json_object"},
                 )
             except Exception as e:
@@ -1713,7 +1852,14 @@ class AsyncMemory(MemoryBase):
             self,
             {"version": self.api_version, "keys": keys, "encoded_ids": encoded_ids, "sync_type": "async"},
         )
-        return returned_memories
+        
+        # Return memories with token counts
+        token_counts = {
+            "fact_extraction_tokens": fact_extraction_tokens,
+            "memory_update_tokens": memory_update_tokens,
+            "total_input_tokens": fact_extraction_tokens + memory_update_tokens
+        }
+        return returned_memories, token_counts
 
     async def _add_to_graph(self, messages, filters):
         added_entities = []

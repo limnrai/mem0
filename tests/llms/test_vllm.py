@@ -159,9 +159,10 @@ def test_thinking_tags_sync():
         infer=True
     )
     
-    assert len(result) == 1
-    assert result[0]["memory"] == "Loves sci-fi"
-    assert result[0]["event"] == "ADD"
+    assert isinstance(result, tuple)
+    assert len(result[0]) == 1
+    assert result[0][0]["memory"] == "Loves sci-fi"
+    assert result[0][0]["event"] == "ADD"
 
 
 
@@ -195,6 +196,7 @@ async def test_async_thinking_tags_async():
             infer=True
         )
     
-    assert len(result) == 1
-    assert result[0]["memory"] == "Loves sci-fi"
-    assert result[0]["event"] == "ADD"
+    assert isinstance(result, tuple)
+    assert len(result[0]) == 1
+    assert result[0][0]["memory"] == "Loves sci-fi"
+    assert result[0][0]["event"] == "ADD"
